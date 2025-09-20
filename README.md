@@ -150,6 +150,10 @@ Daha fazla mimari detay için: [DESIGN.md](./DESIGN.md)
 - 🔸 **Bağlanamıyorum:** Sunucu çalışıyor mu, port ve parola doğru mu?
 - 🔸 **Parçalı veri:** `-C` bayrağı ile nc kullanın, satırların `\r\n` ile bittiğinden emin olun.
 - 🔸 **Hatalı komutlar:** RFC’ye uygun numerik hata mesajları döner.
+- 🔸 **nc Komutunda -C Bayrağı Neden Kullanılır?**  
+	`-C` bayrağı, netcat’in (nc) satır sonlarında otomatik olarak CRLF (`\r\n`) karakter çifti göndermesini sağlar. IRC protokolü, satırların kesinlikle CRLF ile bitmesini ister. Sadece LF (`\n`) ile biterse komutlar işlenmez veya hatalı çalışır. Yani, `-C` olmadan gönderilen komutlar IRC sunucusu tarafından doğru algılanmayabilir.
+- 🔸 **USER Komutunda 0 * Ne Anlama Geliyor?**  
+	IRC protokolünde `USER <username> <mode> <unused> :<realname>` formatı kullanılır. `<mode>` genellikle 0 girilir, modern sunucularda anlamı yoktur (eski RFC’de bazı özel anlamları vardı). `<unused>` yıldız (*) veya başka bir şey olabilir, çoğu sunucu bunu dikkate almaz. Yani, `USER alice 0 * :Alice` yazmak bir standarttır ve IRC istemcileri/sunucuları bu şekilde bekler. Kısacası: “0 *” kısmı protokol gereği doldurulması gereken, ama pratikte işlevi olmayan alanlardır.
 
 ---
 
