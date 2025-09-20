@@ -1,7 +1,7 @@
 
 <div align="center">
-	<h1>✨ ft_irc — Modern C++98 IRC Sunucusu ✨</h1>
-	<p>🚀 <b>Gerçek zamanlı, çoklu istemci destekli, minimal ve RFC uyumlu IRC sunucusu!</b> 🚀</p>
+	<h1> ft_irc — Modern C++98 IRC Sunucusu </h1>
+	<p>🚀 <b>Gerçek zamanlı, çoklu istemci destekli, minimal ve RFC uyumlu IRC sunucusu!</b> </p>
 </div>
 
 ---
