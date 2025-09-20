@@ -1,0 +1,1162 @@
+Proje Mantığı ve Sunumda Anlatılacaklar
+1. Projenin Amacı
+Bu proje, temel bir IRC (Internet Relay Chat) sunucusudur.
+Kullanıcılar belirli bir port üzerinden sunucuya bağlanıp, kanallar oluşturabilir ve mesajlaşabilir.
+2. Temel Bileşenler
+main.cpp: Uygulamanın giriş noktası. Port ve şifreyi alır, sunucuyu başlatır.
+Server.hpp/cpp: Sunucunun ana işlevlerini ve bağlantı yönetimini içerir.
+Client, Channel, Poller, Router: Her biri IRC protokolünün farklı bir yönünü yönetir (kullanıcı, kanal, olay döngüsü, komut yönlendirme).
+3. Sunucunun Çalışma Mantığı
+Sunucu başlatılırken port ve şifre parametreleriyle kurulur.
+Sinyal yakalama ile (örn. Ctrl+C) düzgün kapanma sağlanır.
+Sunucu, yeni istemcileri kabul eder, her istemciyi bir Client nesnesi olarak saklar.
+Her istemciden gelen veriler okunur, satır satır ayrılır ve Router ile ilgili komutlar işlenir.
+Kanallar dinamik olarak oluşturulur ve yönetilir.
+Mesajlar, ilgili kanallara veya istemcilere iletilir.
+4. Önemli Fonksiyonlar
+Server::run(): Olay döngüsünü yönetir, bağlantı ve veri akışını kontrol eder.
+handleAccept(), handleReadable(), handleWritable(): Bağlantı kabulü, veri okuma/yazma işlemlerini yönetir.
+broadcastToChannel(), sendToClient(): Mesaj iletimini sağlar.
+Sunumda Kullanabileceğin Konuşma Metni (Örnek)
+Merhaba, ben bu projede temel bir IRC sunucusu geliştirdim. Projenin amacı, istemcilerin bir sunucuya bağlanıp, kanallar üzerinden birbirleriyle gerçek zamanlı olarak mesajlaşabilmesini sağlamak.
+
+Projenin ana dosyası olan main.cpp, uygulamanın giriş noktasıdır. Burada port ve şifre parametreleri alınır ve sunucu başlatılır. Sunucu, sinyal yakalama mekanizması sayesinde Ctrl+C gibi kesintilerde düzgün bir şekilde kapanabiliyor.
+
+Sunucunun kalbi ise Server sınıfı. Burada bağlantı kabulü, istemci yönetimi, kanal oluşturma ve mesaj iletimi gibi tüm temel işlevler yer alıyor. Her yeni bağlantı bir Client nesnesi olarak saklanıyor ve bu istemciler kanallara katılabiliyor.
+
+Veri akışı ve olay yönetimi için bir Poller sınıfı kullanılıyor. Bu sayede sunucu, aynı anda birden fazla istemciyle verimli şekilde iletişim kurabiliyor.
+
+Mesajlar, ilgili kanallara veya doğrudan istemcilere iletiliyor. Kanallar dinamik olarak oluşturuluyor ve boşaldıklarında otomatik olarak siliniyor.
+
+Kısacası, bu proje ile temel bir IRC sunucusunun nasıl çalıştığını, istemci ve kanal yönetiminin nasıl yapıldığını ve gerçek zamanlı mesajlaşmanın arka planda nasıl organize edildiğini göstermiş oldum.
+
+Sunumda özellikle:
+
+Projenin amacını,
+Temel dosya ve sınıfları,
+Olay döngüsünü ve istemci/kanal yönetimini,
+Mesajlaşma mantığını,
+Kendi katkılarını ve öğrendiklerini
+
+IRC Notlarının Özeti
+Genel Eksikler ve Hatalar
+Kanal modları (+i, +k, +l, +t) tanımlanmış ama kullanılmıyor; bu modlar eksikse puan kaybı olur.
+Prefix formatı (nick!user@host) doğru değil, IP yerine hostname olmalı.
+Port ve input kontrolleri yetersiz; negatif port veya overflow kontrolü yok.
+Parser ve komut yönlendirme (Router) kısmında trailing parametreler ve mesaj birleştirme hatalı; uzun mesajlar veya çok kelimeli mesajlar yanlış parse ediliyor.
+Poller’da boş vektörle poll çağrısı UB (undefined behavior) riski var.
+Error handling, memory/fd leak kontrolleri ve güvenlik (input sanitize) eksik.
+Komutların (MODE, TOPIC, KICK, PART, QUIT, NICK change) çoğu eksik veya hatalı.
+Numerics (001, 421, vs.) ve cevap formatları RFC’ye tam uyumlu değil.
+Sınıfların Amaçları
+Channel: Kanal üyeleri, operatorler, davetliler ve modlar tutulur. Üye ekleme/çıkarma, op atama, davet sistemi gibi işlemler yapılır.
+Client: Her kullanıcıya ait bağlantı, nick, user, kanallar, okuma/yazma buffer’ları ve kimlik doğrulama durumu tutulur.
+Parser: IRC satırını prefix, komut ve parametrelerine ayırır. Trailing parametrelerde ve boşluklu mesajlarda eksikler var.
+Poller: poll() ile çoklu soketleri yönetir. add/modify/remove ile fd’leri ekler/çıkarır, wait ile poll çağrısı yapar.
+Router: Gelen mesajı uygun handler’a yönlendirir. Komutların çoğu burada işlenir, ama parametre birleştirme ve formatlarda eksikler var.
+Server: Socket açma, accept, read, write, client ve kanal yönetimi burada yapılır.
+Akış ve Mantık
+Sunucu bir TCP dinleyici açar, poll() ile çoklu soketleri izler.
+Yeni bağlantı gelince Client nesnesi oluşturulur.
+Gelen veriler buffer’a eklenir, satır tamamlanınca Parser ile ayrıştırılır.
+Router, komutu işler ve gerekirse mesajı kanala veya kullanıcıya iletir.
+Çıkış kuyruğundaki mesajlar handleWritable ile gönderilir.
+Dikkat Edilmesi Gerekenler ve Hızlı Çözümler
+Komutlarda parametre birleştirme (özellikle PRIVMSG ve TOPIC) yapılmalı.
+std::toupper kullanımı güvenli cast ile yapılmalı.
+poll() çağrısı boş vektörde güvenli olmalı.
+Router döngü dışında oluşturulmalı, sürekli yeniden yaratılmamalı.
+Auth akışı (PASS, NICK, USER) tamamlanmadan kullanıcıya komut izni verilmemeli.
+Numerics ve cevap formatları RFC’ye uygun olmalı.
+Partial send ve socket kapanışlarında dikkatli olunmalı
+
+1. Silinen Kanalın Eski Mesajlarının Görünmesi
+Senin sunucunda, bir kanal boşaldığında (yani tüm kullanıcılar ayrıldığında) kanal nesnesi sunucudan siliniyor. Ancak, IRC istemcileri (ör. HexChat, mIRC, irssi gibi) kendi taraflarında kanal geçmişini tutabiliyorlar. Yani:
+
+Sunucu, kanal silindiğinde o kanalın mesajlarını veya geçmişini saklamaz.
+Fakat istemci programı, kullanıcı kanaldayken aldığı mesajları kendi arayüzünde tutar ve kullanıcı tekrar aynı kanala girerse eski mesajları hâlâ görebilir.
+Bu, sunucu tarafında bir “mesaj geçmişi” saklanmadığı, sadece istemcinin kendi önbelleğinde tuttuğu anlamına gelir.
+Yani, kanal silinse bile, istemci programı eski mesajları gösterebilir çünkü bu mesajlar istemcinin belleğinde tutulur, sunucudan tekrar alınmaz.
+
+2. Poller Sınıfı ve Olay Yönetimi (Detaylı Açıklama)
+Poller sınıfı, sunucunun aynı anda birden fazla istemciyle verimli şekilde iletişim kurmasını sağlar. Bunu şöyle anlatabilirsin:
+
+Poller sınıfı, sunucunun çoklu istemci bağlantılarını yönetebilmesi için “I/O multiplexing” (girdi/çıktı çoklama) tekniğini kullanır. Yani, sunucuya birden fazla istemci bağlandığında, her bir istemci için ayrı bir iş parçacığı (thread) açmak yerine, tek bir ana döngüde tüm istemcilerin bağlantılarını izler.
+
+Poller, sistemin “poll” veya “select” gibi fonksiyonlarını kullanarak, hangi istemciden veri geldiğini, hangisine veri gönderilebileceğini veya hangi bağlantının kapandığını tespit eder. Böylece:
+
+Sunucu, binlerce istemciyle aynı anda, hızlı ve verimli şekilde iletişim kurabilir.
+Her istemciden gelen veri, olay tabanlı olarak işlenir. Yani veri geldiğinde veya gönderilecek veri olduğunda Poller bunu algılar ve ilgili fonksiyonları tetikler.
+Bu yöntem, kaynak tüketimini azaltır ve sunucunun ölçeklenebilirliğini artırır.
+Kısacası, Poller sınıfı sayesinde sunucu, çok sayıda istemciyle tek bir ana döngüde, yüksek performansla ve verimli şekilde çalışabiliyor
+
+1. Sunucunun Başlatılması
+Sunucuyu başlatmak için öncelikle main.cpp dosyasında, komut satırından port ve şifre parametreleri alınıyor. Bu parametrelerle bir Server nesnesi oluşturuluyor ve server.run() fonksiyonu çağrılarak sunucu başlatılıyor.
+
+2. Socket Oluşturma ve Dinleme
+Server sınıfının kurucusunda (Server::Server), önce bir socket oluşturuluyor:
+
+socket(AF_INET, SOCK_STREAM, 0) ile TCP tabanlı bir socket açılıyor.
+setsockopt ile adresin tekrar kullanılabilmesi sağlanıyor.
+setNonBlocking fonksiyonu ile socket non-blocking moda alınıyor, böylece sunucu tek bir döngüde tüm istemcileri yönetebiliyor.
+bind fonksiyonu ile socket, verilen port numarasına bağlanıyor.
+listen fonksiyonu ile socket dinlemeye başlıyor ve gelen bağlantılar kabul edilmeye hazır hale geliyor.
+3. Bağlantıların Kabulü
+Sunucu ana döngüsünde (Server::run), Poller ile yeni bağlantı olup olmadığı sürekli kontrol ediliyor. Eğer yeni bir bağlantı gelirse, handleAccept() fonksiyonu çağrılıyor ve:
+
+accept ile yeni istemci bağlantısı kabul ediliyor.
+Her yeni istemci için bir Client nesnesi oluşturuluyor ve poller’a ekleniyor.
+4. Sunucunun Sunucu Olmasını Sağlayan Temel Noktalar
+Socket açılması ve dinlemeye alınması
+Non-blocking yapı ile çoklu istemci desteği
+Poller ile olay tabanlı yönetim
+Her istemci için ayrı nesne ve kanal yönetimi
+Sunumda Şöyle Anlatabilirsin:
+Sunucunun açılışında, öncelikle bir TCP socket oluşturup, bunu belirlediğimiz port numarasına bağlıyoruz. Ardından, bu socket’i dinlemeye alıyoruz. Sunucu, Poller sınıfı sayesinde sürekli olarak yeni bağlantı olup olmadığını ve mevcut istemcilerden veri gelip gelmediğini kontrol ediyor. Yeni bir bağlantı geldiğinde, bu bağlantı kabul edilip bir istemci nesnesi olarak sisteme ekleniyor. Böylece, sunucu aynı anda birden fazla istemciyle iletişim kurabiliyor ve gerçek bir IRC sunucusu gibi davranabiliyor.
+
+
+1. Channel.cpp
+
+removeMember:
+
+_ops.erase(fd); _invited.erase(fd); direkt çağırıyorsun ama fd zaten o setlerde olmayabilir. Çökmez ama “gereksiz erase” çağrıları var. Ufak overhead.
+
+isMember:
+
+For döngüsünde tek satırda hem arama hem return yapmışsın. Kod okunabilirliği düşüyor. std::find kullanmak daha temiz olurdu.
+
+Eksik kısım: _limit, _modeI, _modeT, _modeK, _modeL tanımlanmış ama hiç kullanılmıyor. Bu server kanal modlarını desteklemiyor demek. Eğer 42’nin irc projesi için yapıyorsan, kesin eksi puan alırsın çünkü +i, +k, +l, +t modlarını implemente etmen lazım.
+
+2. Client.cpp
+
+getPrefix:
+
+IRC standardında prefix formatı nick!user@host. Sen _ip koyuyorsun host yerine. Bu çalışır ama doğru değil, testlerde yakalanabilir. Normalde DNS host resolve etmen gerekir (hostname lookup).
+
+consumeWrite:
+
+if (_wq.empty()) return; diyorsun ama sonra if (n >= _wq.front().size()) { _wq.erase(...) }. Burada partial send mantığı var ama edge-case: send() mesela 0 dönerse, sen consumeWrite(0) çağırabilirsin → bu durumda _wq.front().erase(0,0) yapıyor, harmless ama gereksiz.
+
+leaveChannel:
+
+Aynı pattern: loop + erase. std::remove + erase daha temiz.
+
+3. Server main
+
+isNumber:
+
+isdigit → #include <cctype> lazım (ama şu an <cstdlib> var). Derleyicide warning verebilir.
+
+Port için atoi kullanıyorsun, negative veya overflow check yok. Eğer atoi("-1") olursa → port = -1 olur ve Server ctor’una girer, undefined davranışa gidersin. Güvenlik açığı.
+
+4. Parser.cpp
+
+parse:
+
+Çok kritik: IRC mesaj formatı [:prefix] command [params] [:trailing]. Sen trailing kısmı alıyorsun ama prefix parsing zayıf. Örneğin :nick!user@host COMMAND arg1 :some text formatında test et, kesin kırılır.
+
+trim ile parametrelerin başındaki boşlukları atıyorsun, ama RFC 1459’da parametrelerin ortasında boşluk varsa trailing kısmına kaydırılması lazım. Sen onu yapmıyorsun. Yani "PRIVMSG #chan :hello world" doğru parse edilmez → params ["#chan", "hello world"] olmalı. Şu an "hello world"’ü yanlış kırabilirsin.
+
+5. Poller.cpp
+
+wait:
+
+poll(ptr, n, timeoutMs) → burada ptr = &_pfds[0]. Ama _pfds boşsa &_pfds[0] undefined behavior. Sen ? (struct pollfd*)0 yapmışsın ama sonra poll(0,0,timeout) çağırıyorsun. Bu POSIX’te valid, ama NULL pointer geçmek UB olabilir. Daha güvenli:
+
+return _pfds.empty() ? 0 : poll(&_pfds[0], _pfds.size(), timeoutMs);
+
+
+isReadable / isWritable:
+
+Döngüden erken return etmen daha iyi. Şu an for içinde if + return var, ama readability düşük.
+
+Genel eksikler
+
+Error handling yok: hiçbir yerde exception atılmıyor (örn. Parser::parse yanlış formatta input alırsa).
+
+Memory / fd leaks kontrol edilmiyor.
+
+Mode, Topic, Kick, Part, Quit, Nick change gibi komutların implementasyonu yok → bu haliyle sadece bağlantı kabul eder, ama gerçek bir IRC server gibi davranmaz.
+
+Security: input sanitize zayıf. Kullanıcı nicklerinde boşluk veya özel karakter test edilmemiş.
+
+1. Router.cpp (komut yönlendirme)
+
+Command uppercase → for (size_t i = 0; i < m.command.size(); ++i) m.command[i] = std::toupper(m.command[i]);
+Burada std::toupper aslında int döner ve unsigned char bekler. Lokalization’a göre undefined behavior çıkabilir. m.command[i] = std::toupper((unsigned char)m.command[i]); diye düzelt.
+
+USER kaydı → if (!c->isPassOk()) { ... } else if (c->authed()) { ... }
+Burada authed() kontrolünü PASS, NICK, USER üçlüsü tamamlandığında tetiklemek lazım. Yoksa adam PASS’i atlarsa, nick/user’ı setlenip ama asla 001 welcome dönmeyebilir.
+
+PRIVMSG / NOTICE → std::string text = m.params[1];
+Burada sadece ilk parametreyi alıyorsun. Halbuki IRC protokolünde mesajın geri kalanı :<mesajın tamamı> olabilir. Yani "PRIVMSG #chan :selam millet nasılsınız" geldiğinde sen sadece "selam" göreceksin. join(m.params.begin()+1, m.params.end()) gibi birleştirme yapman lazım.
+
+TOPIC → aynı problem, sadece m.params[1] alıyorsun ama :<uzun topic> geldiğinde tek kelime kalır.
+
+INVITE → _s->sendToClient(dst->getFd(), crlf(":ircserv INVITE " + nick + " :" + chan));
+Normalde prefix göndermen gerek: :<inviter_nick>!user@host INVITE target_nick :#chan. Sen kendi server nick’i gibi dönüyorsun → bazı client’lar bunu kabul etmez.
+
+MODE → çok kaba implementasyon var. Parametre parsing sıkıntılı (örn. +k için parametre lazım ama yoksa crash). Ayrıca o mode’da: _s->findClientByNick(m.params[pidx++]) yoksa segmentation. Burayı sıkılaştırman şart.
+
+General → Unknown command için 421 döndürmen güzel ama <nick> <command> formatını eksik gönderiyorsun. RFC’de 421 şu şekilde: :server 421 <nick> <command> :Unknown command.
+
+2. Server.cpp (socket + poller)
+
+IPv6/IPv4 fallback mantıklı ama bind hata durumlarını daha açık loglamak iyi olur. Şu an bind() failed deyip bırakıyorsun.
+
+handleAccept → döngüde accept sonrası _poller->add(cfd, POLLIN); yapıyorsun. Ama POLLHUP, POLLERR gibi şeyleri de eklemen lazım yoksa bazı durumlar kaçabilir.
+
+addClient → şimdilik sadece NOTICE * :Welcome atıyorsun. Ama RFC’ye göre 001, 002, 003, 004 gibi welcome numerics döndürmen gerek. Yoksa HexChat/irssi gibi client’lar “bağlandım ama register olmadım” diye takılır.
+
+removeClient → şu an kanallardan çıkarken broadcastToChannel(... "PART ...") gönderiyorsun ama QUIT event’i asıl gerekli. Client kapanıyorsa, diğerleri :<nick> QUIT :reason görmeli.
+
+handleReadable → Router router(this); her satır için yeni Router instance oluşturuyorsun. Bu gereksiz. Router zaten server pointer tutuyor, bir kere oluşturup loop boyunca reuse et. Yoksa overhead.
+
+handleWritable → incomplete: dosya sonu kesilmiş. Ama dikkat: sen send() ile tüm buffer’ı gönderemezsen (EAGAIN, short write) halinde buffer’ı kırpıp kalanını sırada bırakman lazım. Yoksa mesajlar eksik gider.
+
+3. Genel riskler
+
+Line parsing → IRC mesajları \r\n ile biter. Client \n atarsa, senin parser’ında sorun olabilir.
+
+Thread safety yok → tek poller thread çalışıyor, tamam, ama dikkat: _clients map üzerinde remove sırasında iterator invalidation olabilir.
+
+UTF-8 / nickname validation yok → RFC’ye göre nick valid karakter setini kontrol etmen lazım. Şu an "nick with space" bile geçer.
+
+1. Channel.cpp
+
+Amaç: Kanalları (IRC’de #channel) temsil ediyor.
+
+_members: kanaldaki client FD’leri.
+
+_ops: operator olan client FD seti.
+
+_invited: davetli kullanıcılar.
+
+_limit, _modeI, _modeT, _modeK, _modeL: kanal modlarını saklıyor (invite-only, topic protected, key, limit).
+
+Önemli fonksiyonlar:
+
+addMember(fd): kullanıcıyı kanala ekler.
+
+removeMember(fd): çıkarır + ops/invite listesinden de temizler.
+
+isMember(fd): kanalda var mı kontrol.
+
+addOp/removeOp/isOp: operator kontrolü.
+
+invite/isInvited/revokeInvite: davet sistemi.
+
+Yani burası tamamen kanal yönetim state’i.
+
+2. Client.cpp
+
+Amaç: Bağlanan her kullanıcıyı temsil ediyor.
+
+_fd: socket FD.
+
+_ip, _port: bağlantı bilgisi.
+
+_nick, _user: kullanıcı kimliği.
+
+_channels: hangi kanallara üye olduğu.
+
+_rbuf: socket’ten gelen ham veri.
+
+_wq: çıkış kuyruğu (mesajlar).
+
+_passOk: PASS kontrolü geçti mi.
+
+Önemli fonksiyonlar:
+
+getPrefix(): IRC prefix formatı döner nick!user@ip.
+
+appendRead(data, n): gelen veriyi _rbuf’a ekler.
+
+nextLine(out): _rbuf içinden bir satır çıkarır (\r\n bitince).
+
+queueWrite(msg): çıkış kuyruğuna mesaj ekler.
+
+hasWrite/peekWrite/consumeWrite: çıkış kuyruğunu yönetir.
+
+joinChannel(name) / leaveChannel(name): kanal listesini günceller.
+
+Yani Client sınıfı “her kullanıcıyla ilgili state + soket IO buffer”.
+
+3. main.cpp
+
+Amaç: Program giriş noktası.
+
+argc != 3 → Usage mesajı.
+
+argv[1]: port, argv[2]: password.
+
+isNumber(port) ile port check.
+
+Server server(port, password); server.run(); → server ayağa kalkıyor.
+
+Kısaca parametre check + server başlatma.
+
+4. Parser.cpp
+
+Amaç: IRC satırını Message struct’ına çeviriyor.
+
+Trim fonksiyonu boşluk/tab kırpıyor.
+
+parse(line) akışı:
+
+Eğer : ile başlıyorsa prefix var → nick!user@host.
+
+Sonraki token → command (örn. NICK, USER, JOIN).
+
+Geri kalanlar → params. Eğer : ile başlıyorsa, geri kalanı tek parametre sayıyor (örn. mesajlar).
+
+Parametreleri trim’liyor.
+
+Sonuç: Message = { prefix, command, params }.
+
+5. Poller.cpp
+
+Amaç: poll() sistem çağrısı ile IO multiplexing.
+
+_pfds: pollfd array’i.
+
+add(fd, events): FD ekler.
+
+modify(fd, events): FD event maskesini değiştirir.
+
+remove(fd): FD siler.
+
+wait(timeout): poll çağırır.
+
+isReadable/isWritable: event kontrolü.
+
+readables()/writables(): FD listesi döner.
+
+Kısaca Linux’ta çoklu client IO’yu yönetiyor.
+
+6. Router.cpp
+
+Amaç: Gelen Message’ı uygun handler’a yönlendirmek.
+
+PASS, NICK, USER, JOIN, PART, PRIVMSG, NOTICE, TOPIC, INVITE, KICK, MODE, QUIT, PING, LIST, NAMES, WHO, MOTD → hepsi burada tek tek if zinciriyle işleniyor.
+
+Her komutun içi client/kanal state’ini güncelliyor ve Server üzerinden broadcast yapıyor.
+
+Burası “beyin” gibi → hangi komut geldi, nasıl cevap verilecek.
+
+7. Server.cpp
+
+Amaç: IRC server’ın çekirdeği.
+
+Server(port, password): soket aç, bind, listen.
+
+run(): sonsuz loop:
+
+poller.wait() → IO event bekler.
+
+readable fd’ler → handleReadable(fd).
+
+writable fd’ler → handleWritable(fd).
+
+handleAccept(): yeni client kabul et, Client oluştur, poller’a ekle.
+
+handleReadable(fd):
+
+Client’ı bul.
+
+Veri oku, appendRead.
+
+Satır geldikçe Parser::parse.
+
+Router çağır.
+
+handleWritable(fd): kuyruğu send() ile client’a gönder.
+
+removeClient(fd): client kapatılırken temizle.
+
+Burası “motor” → soket + poller + client management.
+
+Genel Çalışma Akışı
+
+main → Server::run().
+
+poll() bekler.
+
+Yeni bağlantı gelirse handleAccept → yeni Client.
+
+Veri gelirse handleReadable → Parser → Router.
+
+Router ilgili komutu işler → Server ve Channel günceller.
+
+Mesaj çıkışı varsa → queueWrite → sonra handleWritable ile gönderilir.
+
+Özet
+
+Channel → kanal state.
+
+Client → kullanıcı state + IO buffer.
+
+Parser → raw satır → Message.
+
+Poller → IO multiplex.
+
+Router → komut yönlendirme.
+
+Server → soket + client management.
+
+main → sadece parametre check + server başlat.
+
+Yüksek seviye: sistem nasıl çalışıyor?
+
+Kısaca: program bir TCP dinleyici açıyor, poll() ile çoklu soketleri izliyor. Yeni bağlantı gelince Client nesnesi oluşturuluyor. Soketten gelen ham veriler Client._rbuf'a ekleniyor. \r\n ile biten tam satırlar Parser tarafından Message nesnesine dönüştürülüyor. Router bu mesajı alıp komuta göre sunucu/kanal/diğer istemcilere mesaj gönderiyor. Çıktılar Client._wq kuyruğuna konuyor; handleWritable kuyruğu send() ile socket’e boşaltıyor.
+
+Dosya/komponent bazlı detaylar
+Channel (kanal state)
+
+Amaç: bir kanalın (örn. #foo) üyelerini, operatörlerini, modlarını, davetlileri tutmak.
+
+Önemli alanlar:
+
+std::vector<int> _members — FD listesi
+
+std::set<int> _ops — op (operator) FD’leri
+
+std::set<int> _invited — invite-only için davetliler
+
+_limit, _modeI, _modeT, _modeK vb — modlar / limit / key
+
+Tipik işlemler:
+
+addMember(fd), removeMember(fd): üyelik yönetimi
+
+isMember(fd), isOp(fd) — sorgular
+
+invite(fd), isInvited(fd), revokeInvite(fd) — invite-only mekanizması
+
+Kırılma noktaları / dikkat:
+
+removeMember vektörden silerken indeks yönetimi önemli; erase(begin()+i) güvenli ama std::remove+erase daha temiz.
+
+Modlar (invite-only, key, limit) doğru şekilde kontrol edilmeli — eğer bir kanalı #foo +k secret yapıyorsan JOIN isteğinde key kontrolü kesin olmalı.
+
+Kanal boşaldığında nesneyi silmeyi unutma (removeChannelIfEmpty server tarafında yapılmalı).
+
+Client (kullanıcı state + IO buffer)
+
+Amaç: Her bağlantı için durum tutmak.
+
+Önemli alanlar:
+
+_fd, _ip, _port — bağlantı bilgileri
+
+_nick, _user, _real — kimlik bilgileri
+
+_rbuf — gelen ham veri (string)
+
+_wq — gönderilecek mesaj kuyruğu (vector<string>)
+
+_channels — kullanıcının üye olduğu kanallar
+
+_passOk — PASS doğrulandı mı?
+
+Önemli fonksiyonlar:
+
+appendRead(data, n) — recv() ile gelen veriyi _rbuf'a ekle
+
+nextLine(out) — _rbuf içinde \r\n bulursa satırı çıkarıp verir
+
+queueWrite(msg), peekWrite(), consumeWrite(n) — çıkış kuyruğu yönetimi
+
+Kritik ayrıntılar:
+
+nextLine sadece \r\n arıyor; bazı istemciler \n ile gönderebilir. (Tercih: protokol açısından \r\n kesin ama tolerant olmak testlerde işe yarar.)
+
+consumeWrite: send() kısmi yazma yapabilir. n dönüşünü kullanıp kuyruk başını uygun şekilde kırmalısın. Eğer send() 0 dönerse dikkat — genelde socket kapandı.
+
+getPrefix() şu an nick!user@ip döndürüyor; tipik uygulama host kısmına hostname koyar. Testlerde IP kabul edilebilir ama RFC uyumluluğu açısından hostname daha doğru.
+
+Parser (satırı Message’a çevirme)
+
+Amaç: Gelen düz metin satırını (:prefix COMMAND params :trailing) ayrıştırmak.
+
+Temel akış:
+
+Eğer satır : ile başlıyorsa ilk token prefix (ör. :nick!user@host)
+
+Sonraki token command (örn. PRIVMSG, JOIN)
+
+Geri kalanı parametrelerdir; eğer bir parametre : ile başlıyorsa o anki parametrenin geri kalanı (trailing) tek bir parametre olarak alınır.
+
+Örnek:
+
+:nick!user@host PRIVMSG #chan :selam millet nasıl gidiyor\r\n
+
+
+→ prefix = nick!user@host, command = PRIVMSG, params = ["#chan", "selam millet nasıl gidiyor"]
+
+Senin kodunun eksikleri:
+
+trim fonksiyonu iyi ama parse'ın trailing mantığı bazı corner-caselerde hata verebilir (örn. prefix varsa ama format farklıysa).
+
+m.command büyük/küçük harf dönüşümünü üst katmanda yapıyorsun; sorun değil ama std::toupper kullanımı güvenli cast gerektirir ((unsigned char) ile).
+
+nextLine ile uyumlu çalışır ama parametre birleştirme güvenli yapıldığından emin olmalısın (PRIVMSG metnini birleştirmek gibi).
+
+Poller (I/O multiplexing)
+
+Amaç: poll() çağrısını sarmak — hangi fd okunabilir/yazılabilir.
+
+Yapılanlar:
+
+_pfds içinde pollfd struct'larını tutuyorsun.
+
+add, modify, remove basit map/vektor manipülasyonları.
+
+wait(timeout) → poll(ptr, n, timeout)
+
+Tehlikeli yerler:
+
+_pfds.empty() iken _pfds[0] almaya çalışmak UB. Kodunda buna benzeyen bir koruma var ama daha temiz: eğer _pfds boşsa poll(nullptr, 0, timeout) kullan veya if empty return 0.
+
+modify/remove gibi fonksiyonlarda fd bulunmazsa silent geçiliyor — debug için log atmak iyi olur.
+
+Router (komut yönlendirme / komut işleyici)
+
+Amaç: Message al, authorize kontrolü yap, komuta göre Server/Channel/Client işlemlerini yap.
+
+Örnek komut akışları:
+
+PASS password — bağlanan kullanıcının şifre kontrolü
+
+NICK nick — nickname ata (çakışma kontrolü)
+
+USER user mode unused realname — RFC gereği kaydın ikinci yarısı
+
+JOIN #chan — kanal join, mode/key/limit/invite kontrolü
+
+PRIVMSG target :text — hedefe mesaj gönderme (kanala broadcast veya bireye send)
+
+MODE, KICK, INVITE, PART, QUIT, PING/PONG — ilgili işlemler
+
+Önemli yanlışlar/eksikler:
+
+PRIVMSG ve TOPIC gibi komutlarda mesajın geri kalanını (: ile başlayan trailing) doğru alman lazım. Sen m.params[1] diyor, ama trailing parametre birden fazla kelimeyse parse bunu tek parça yapmalı veya Router birleştime yapmalı.
+
+Auth: PASS, NICK, USER üçlüsünden sonra kullanıcı authed() olmalı. Kodda bu akış eksik/eş zamanlı hataya açık.
+
+MODE implementation çok yüzeysel; örn +k parametresi yoksa güvenli davranmalı, +l için non-number kontrolü yapılmalı.
+
+Yanıt formatları (:ircserv 421 <nick> <cmd> :Unknown command) RFC numerics’lerine uyumlu değil — testler numeric bekleyebilir.
+
+Server (soket + client yönetimi)
+
+Amaç: Dinleme socket’i açmak (IPv6/IPv4), accept, read, write, client/kanal haritalarını tutmak.
+
+Önemli fonksiyonlar:
+
+setupSocket() — IPv6 deniyor, başarısızsa IPv4 açıyor. Non-blocking yapıyor.
+
+run() — poll loop, accept/read/write döngüsü
+
+handleAccept() — accept, client oluştur, setNonBlocking, addClient
+
+handleReadable(fd) — recv() döngüsü, appendRead, nextLine + Router.handle
+
+handleWritable(fd) — kuyruğu send() ile boşaltma
+
+removeClient(fd, reason) — client kapatıp kanallardan çıkarma
+
+Kritik hatalar ve düzeltmeler:
+
+handleReadable her satır için Router router(this); oluşturuyor. Bu gereksiz overhead — Router stateless ise bir tane daha üstte tut, stateful ise referans ver.
+
+handleReadable içinde recv() döngüsü: n==0 disconnect demek, n<0 ve errno==EAGAIN anlamı “daha sonra oku” (normal). Bunları doğru ayrıştırıyorsun ama removeClient çağrılmadan önce poller’dan fd’yi kaldırıp close etmelisin.
+
+handleWritable: send() her zaman bütün veriyi yazmayabilir (kısmî yazma). consumeWrite(n) buna göre kuyruktan kalanları bırakıyor ama satır başında if (n == 0) break; diye bir kontrol var — send()'in 0 dönüşü genelde kapalı soket belirtir; dikkat. Ayrıca updatePollWrite(fd) ile POLLOUT’u kapatman doğru, ama modify çağrısının başarılı olduğundan emin ol.
+
+removeClient: kanallardan çıkarırken broadcastToChannel çağırıyorsun ama eğer broadcast içinde sendToClient client listesinden birini sildiriyorsa iterasyon bozulabilir. (Burada sen kopyasını alıp dolaşıyorsun — iyi.)
+
+Bir IRC mesajının baştan sona akışı (örnek, tam adım adım)
+
+Kullanıcı A client’te send("PRIVMSG #deneme :selam dünya\r\n"). TCP üzerinden sunucuya gider.
+
+Sunucu recv() alır, Client._rbuf.append(...).
+
+Client::nextLine \r\n bulunca satırı çıkarır → line = "PRIVMSG #deneme :selam dünya".
+
+Parser::parse(line) çalışır → Message{prefix="", command="PRIVMSG", params=["#deneme", "selam dünya"]}
+
+Router::handle(fd, m) çalışır:
+
+Yetki kontrolü (authed?) → geçerli ise
+
+target #deneme → kanal bulunur, isMember(fd) kontrol edilir
+
+broadcast string oluşturulur: ":nick!user@host PRIVMSG #deneme :selam dünya\r\n"
+
+Server::broadcastToChannel tüm üyelerin Client::_wq'sine queueWrite(msg) yapar (gönderen hariç).
+
+Bir sonraki poll döngüsünde o üyelerin fd’si POLLOUT olarak gelir. handleWritable çağrılır.
+
+send() ile verinin bir kısmı ya da tamamı gidilir. consumeWrite(n) ile kuyruktan çıkarılır. Eğer veri kalmışsa POLLOUT açık kalır; yoksa POLLOUT kapatılır.
+
+En kritik düzeltmeler — hızlı ve somut (kod-snippet’ler)
+1) std::toupper kullanımı (güvenli cast)
+for (size_t i = 0; i < m.command.size(); ++i)
+    m.command[i] = static_cast<char>(std::toupper(static_cast<unsigned char>(m.command[i])));
+
+2) PRIVMSG/trailing parametreleri doğru almak (Router içinde)
+
+Router’da std::string text = m.params[1]; kullanmak yerine:
+
+// params: ["#chan", "mesajın tamamı"] OR ["nick", "msg"]
+// ama eğer parse olayı boşlukları ayırdıysa:
+std::string text;
+if (m.params.size() >= 2) {
+    // join tüm kalan parametreleri birleştir (örn. bazı implementasyonlarda parse
+    // trailing kısmı tek parametre olmalı ama güvenlik için yine de birleştir)
+    for (size_t i = 1; i < m.params.size(); ++i) {
+        if (i > 1) text += " ";
+        text += m.params[i];
+    }
+}
+
+3) Parser::parse — trailing parametre kesinleştirme (örnek)
+// (basit pseudo)
+if (pos < s.size()) {
+    while (pos < s.size()) {
+        if (s[pos] == ':') {
+            // geri kalan tek parametre (trailing)
+            m.params.push_back(s.substr(pos+1));
+            break;
+        }
+        size_t next = s.find(' ', pos);
+        if (next == std::string::npos) { m.params.push_back(s.substr(pos)); break; }
+        m.params.push_back(s.substr(pos, next-pos));
+        pos = next + 1;
+    }
+}
+
+
+(Bu senin kodla büyük oranda aynı; önemli olan Router’da kesinleştirmek.)
+
+4) Poller::wait güvenli kullanımı
+int Poller::wait(int timeoutMs) {
+    if (_pfds.empty()) return 0;
+    return poll(&_pfds[0], (nfds_t)_pfds.size(), timeoutMs);
+}
+
+
+veya POSIX'e göre poll(nullptr, 0, timeout) güvenli ise onu kullan.
+
+5) Server::handleReadable — Router reuse & safer loop
+
+Router’ı döngü dışında oluştur.
+
+recv() döngüsünde maksimum okuma sonrası kır.
+
+// Router router(this); // Server::run dışında, veya Server field olarak
+while (c->nextLine(line)) {
+    router.handle(fd, line);
+}
+
+6) consumeWrite ve handleWritable dikkatleri
+
+send() kısmi yazarsa kalan segmenti koru.
+
+Eğer send() -1 veriyorsa ve errno==EAGAIN/EWOULDBLOCK → POLLOUT bekle, return.
+
+Eğer send() == 0 → genelde peer kapatmış, removeClient çağır.
+
+Kod skeç:
+
+ssize_t n = send(fd, front.c_str(), front.size(), 0);
+if (n < 0) {
+    if (errno == EAGAIN || errno == EWOULDBLOCK) return;
+    removeClient(fd, "Write error");
+    return;
+}
+if (n == 0) { removeClient(fd, "Write error (0)"); return; }
+c->consumeWrite((size_t)n);
+
+Protokol uyumluluğu ve RFC’den dikkat edilmesi gerekenler
+
+Mesaj maksimum uzunluğu: RFC 1459 ~512 byte (CRLF dahil). Gelen uzunlukları sınırla.
+
+Nick ve user validasyonu: geçerli karakter seti ve maksimum uzunluk (örn nick ≤ 9/30 karakter, sunucuna göre değişir).
+
+Numerics: client’lar çoğu olayda numeric reply bekler (001, 002, 003, 332 topic, 331 no-topic, 401 no-such-nick, 421 unknown-command vb). Bunları doğru formatta döndür. Format genelde :server 001 nick :Welcome ya da :server 401 nick target :No such nick.
+
+Modes: +i invite-only, +k key, +l limit, +t topic protected, +o op. Mode değişiklikleri broadcast edilmelidir.
+
+PING/PONG: keepalive için doğru cevap verilmeli; server ayrıca istemcilere PING atabilir.
+
+Güvenlik / robustness notları
+
+Input sanitization: nick veya topic içinde CR/LF olmamalı — bunu reddet.
+
+DoS koruması: aynı IP’den çok hızlı bağlantı/mesaj limitleri koy.
+
+Resource leaks: client silme sırasında poller’dan fd’yi çıkarmak, close etmek, sonra delete etmek; aksi halde poll kapalı fd'yi tekrar görebilir.
+
+Partial writes: her zaman handleWritable için test et.
+
+Exception safety: new sonrası hata olursa leak olmasın — smart pointer kullanılabilir ama 42 projeleri raw new/delete ister olabilir.
+
+Öncelikli düzeltme listesi (hangi sırayla yap)
+
+Parser/Router: trailing parametreyi ve PRIVMSG birleşimini kesinleştir. (Çünkü mesajlar doğru gitmiyorsa testler fail olur.)
+
+toupper cast fix. (Çok basit ama subtle crash kaynağı olabilir.)
+
+handleWritable / consumeWrite kurgusunu sağlamlaştır. (Mesajlar eksik gidiyor veya deadlock oluyor.)
+
+Poller::wait güvenliği (empty vector) ve Server::handleReadable içinde Router oluşturmayı kaldır.
+
+Auth akışı: PASS/NICK/USER -> authed() mantığını düzelt. (Client register olmadan komut kabul etmeyin.)
+
+Numerics (001–004, 331/332/401/404/421...) ile client uyumluluğu sağla.
+
+MODE detayları (o, k, l,..), topic değişikliklerinin broadcast formatını RFC'ye göre fix.
+
+# IRC Sunucusunu Çok Basitçe Anlatıyorum
+
+---
+
+## 1) Çok kısa özet — Ne oluyor?
+
+* Sunucu bir **dinleyici** açar (TCP).
+* Birisi bağlanınca **Client** nesnesi yaratılır.
+* Soketten gelen veriler **buf**'a (bellek) eklenir.
+* Tam bir satır (`\r\n` ile biten) gelince **Parser** bu satırı parçalar: `prefix`, `komut`, `parametreler`.
+* **Router** hangi komut olduğunu görür (ör. JOIN, PRIVMSG) ve gerekli işlemi yapar.
+* Gönderilecek metinler **Client**'in çıkış kuyruğuna (write queue) konur.
+* `poll()` veya `select()` ile hangi soket yazılabilir/okunabilir bakılır; yazılabilirse kuyruğun içi gönderilir.
+
+---
+
+## 2) Her parça ne iş yapıyor — süper sade
+
+### Channel (Kanal)
+
+* `#kanal` diye düşün. İçinde üyeler var.
+* Yapabildiği: üye ekle/çıkar, op (operator) tut, davetli listesi tut, kanal modlarını tut (ör. invite-only).
+
+### Client (Kullanıcı)
+
+* Her bağlanan kişi için bir obje.
+* İçinde: socket numarası (fd), nick, kullanıcı adı, hangi kanallarda olduğu, okunan veri tamponu (`rbuf`), gönderilecek mesaj kuyruğu (`wq`).
+* `nextLine()` fonksiyonu: `rbuf`'da `\r\n` görünce bir satır çıkartır.
+
+### Parser
+
+* Bir satırı alır: `:prefix KOMUT param1 param2 :trailing text`
+* `prefix` (opsiyonel), `komut` (zorunlu), `params` (0+ adet) ayırır.
+* `:trailing text` kısmı, parametrenin geri kalanıdır (boşluk içerir).
+
+### Poller
+
+* `poll()` sarma: hangi socket okunabilir/yazılabilir kontrolü.
+* Her fd için `events` tutar (POLLIN, POLLOUT).
+
+### Router
+
+* Gelen `Message`'a göre ne yapılacağını kararlaştırır.
+* Örneğin `JOIN #a` gelirse: kanal bul / yoksa yarat, limit/key/invite kontrolü yap, kullanıcıyı üye yap, op ataması yap, katılma mesajı broadcast et.
+
+### Server
+
+* Hepsini bir araya getirir: socket aç, accept, read, write, client/kanal map'lerini yönetir.
+
+---
+
+## 3) Basit örnek akış (adım adım)
+
+1. Kullanıcı `PRIVMSG #chat :selam dünya` gönderir.
+2. Sunucu `recv()` ile veri alır, `Client.rbuf`'a ekler.
+3. `nextLine()` satırı çıkarır: `PRIVMSG #chat :selam dünya`.
+4. `Parser` -> `command=PRIVMSG`, `params=["#chat","selam dünya"]`.
+5. `Router` görür: hedef `#chat` -> `broadcastToChannel` çağrılır.
+6. Her üyenin `Client.wq`'sine `":nick PRIVMSG #chat :selam dünya\r\n"` eklenir.
+7. `poll()` o fd'leri yazılabilir gösterince, `Server.handleWritable` gönderir.
+
+---
+
+## 4) Şimdi en basit dille sorunlar ve ne yapacağına dair kısa çözümler
+
+> Her madde: sorun — neden kötü — çözüm (kodu nasıl değiştirirsin).
+
+### A. **PRIVMSG mesajının tamamını almıyor**
+
+* **Sorun:** Kod sadece `m.params[1]` alıyor. Ama mesaj `:selam dünya nasılsın` gibi birden fazla kelime içerir.
+* **Neden kötü:** Sadece ilk kelime gidiyor, kullanıcı mesajı eksik görünüyor.
+* **Çözüm:** Router içinde parametreleri baştan sona birleştir. Örnek:
+
+  ```cpp
+  std::string text;
+  for (size_t i = 1; i < m.params.size(); ++i) {
+      if (i > 1) text += " ";
+      text += m.params[i];
+  }
+  ```
+
+### B. **Komutları uppercase yaparken hata riski**
+
+* **Sorun:** `std::toupper` doğrudan char alıyor; signed char sorun çıkarabilir.
+* **Çözüm:** `m.command[i] = static_cast<char>(std::toupper(static_cast<unsigned char>(m.command[i])));`
+
+### C. **Partial send (kısmi gönderimler) yanlış yönetiliyor**
+
+* **Sorun:** `send()` her zaman tüm veriyi göndermez. Kısmen gönderirse kalan silinmemeli, ya da yanlış hesaplanırsa veri kaybı olur.
+* **Çözüm:** `consumeWrite(n)` fonksiyonu kalanı doğru silmeli; `send()` 0 veya negatif dönerse özel işlem yap.
+
+### D. **Parser doğru parse etmeyebilir (trailing)**
+
+* **Sorun:** `:` ile başlayan trailing kısmı doğru alınmalı. Kod genel hatlarıyla alıyor ama edge-case test et.
+* **Çözüm:** `parse()` zaten `:` gördüğünde geri kalanı tek parametre yapıyor; router'da yine birleştirme yap, güvenli tarafta ol.
+
+### E. **Poller::wait boş vektörde UB yapabilir**
+
+* **Çözüm:** `if (_pfds.empty()) return 0;` veya `poll(nullptr, 0, timeout)` kullan.
+
+### F. **Auth (REGISTER) akışı eksik**
+
+* **Sorun:** IRC'de `PASS` (opsiyonel), `NICK`, `USER` üçü tamamlandığında kullanıcı register sayılır. Kodda `authed()` kontrolü zayıf.
+* **Çözüm:** `Client` içinde `bool hasNick, hasUser, passOk;` tut. `authed()` = `hasNick && hasUser && (passOk || noPasswordRequired)`.
+
+---
+
+## 5) Hemen yapabileceğin 5 hızlı değişiklik (sıralı)
+
+1. Router: PRIVMSG ve TOPIC için param birleştirme ekle. (Çünkü en görünür hata bu)
+2. Parser: `toupper` casting düzeltmesi.
+3. Poller::wait: boş kontrollü yap.
+4. Server: `Router router(this);`'ı döngü dışına al, sürekli yeniden oluşturma.
+5. Server: `removeClient` çağırmadan önce `_poller->remove(fd); close(fd); delete client;` sırasını netleştir.
+
+---
+
+## 6) Test etme — neyle test edersin?
+
+* Lokal olarak: `telnet localhost 6667` veya `nc localhost 6667` bağlan.
+* Komut dizisi örneği:
+
+  ```
+  PASS secret\r\n
+  NICK bot1\r\n
+  USER user 0 * :Real Name\r\n
+  JOIN #deneme\r\n
+  PRIVMSG #deneme :selam dünya hosgeldiniz\r\n
+  QUIT :bye\r\n
+  ```
+* İzle: server konsolunda log varsa, client tarafında `PRIVMSG` alan diğer client'larda tam mesaj gidiyor mu?
+
+1. #include kısımları
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <iostream>
+#include <string>
+#include <vector>
+#include <sstream>
+
+
+Bunlar kütüphaneler.
+
+sys/socket.h, netinet/in.h, arpa/inet.h → ağ (socket) işlemleri için.
+
+unistd.h → close() gibi Unix fonksiyonları.
+
+iostream, string, vector, sstream → C++’ta yazı yazmak, string tutmak, liste yapmak için.
+
+2. Client sınıfı
+class Client {
+public:
+    int socket;
+    std::string nickname;
+    std::string buffer;
+
+    Client(int sock) : socket(sock) {}
+};
+
+
+Bu, bağlanan kullanıcıları temsil ediyor.
+
+Her kullanıcı (client) için:
+
+socket numarası (socket) → bilgisayar ile kullanıcı arasındaki bağlantı.
+
+nickname → IRC’de görünen kullanıcı adı.
+
+buffer → kullanıcıdan gelen ham mesajları geçici tutmak için.
+
+3. IRCServer sınıfı
+class IRCServer {
+private:
+    int serverSocket;
+    std::vector<Client> clients;
+
+
+Sunucunun kendisini tanımlıyor.
+
+serverSocket → tek bir numara, bu sayede kullanıcılar bağlanıyor.
+
+clients → tüm bağlı kullanıcıların listesi (vector içinde Client).
+
+4. start(int port)
+void start(int port) {
+    serverSocket = socket(AF_INET, SOCK_STREAM, 0);
+    ...
+}
+
+
+Burada sunucu başlatılıyor.
+
+socket(AF_INET, SOCK_STREAM, 0) → TCP bağlantısı için yeni soket açar.
+
+sockaddr_in serverAddr → IP ve port bilgisini tutar.
+
+AF_INET → IPv4.
+
+INADDR_ANY → hangi IP’den gelirse gelsin kabul et.
+
+htons(port) → portu doğru formata çevirir.
+
+bind() → bu portu bilgisayara bağlar.
+
+listen() → artık bağlantı beklemeye başlar.
+
+5. handleConnections()
+
+Sonsuz döngü çalışıyor.
+
+accept() → yeni biri bağlanırsa Client oluşturup clients listesine ekliyor.
+
+Sonra tüm client’leri gezip recv() ile mesaj gelmiş mi diye bakıyor.
+
+Mesaj varsa:
+
+/nick komutu ise → kullanıcının adını değiştiriyor.
+
+Değilse → herkese gönderiyor (broadcast).
+
+6. broadcast(message, senderSocket)
+void broadcast(const std::string& message, int senderSocket) {
+    for (auto& client : clients) {
+        if (client.socket != senderSocket) {
+            send(client.socket, message.c_str(), message.size(), 0);
+        }
+    }
+}
+
+
+Gelen mesajı herkese yayar.
+
+Gönderen hariç (if (client.socket != senderSocket)), çünkü kendi yazdığını tekrar görmesin.
+
+7. main()
+int main() {
+    IRCServer server;
+    server.start(6667);
+    return 0;
+}
+
+
+Programı başlatır.
+
+6667 → klasik IRC portu.
+
+📌 Özet:
+
+Program küçük bir IRC server.
+
+Yeni kullanıcı bağlanınca listeye ekleniyor.
+
+Kullanıcı mesaj yazarsa → ya nick değiştiriyor ya da mesajı herkese gidiyor.
+
+Mantık çok basit bir chat odası gibi.
+1. void start(int port)
+
+Bu fonksiyon sunucuyu açıyor ve başlatıyor.
+Adım adım:
+
+serverSocket = socket(AF_INET, SOCK_STREAM, 0);
+
+Yeni bir soket açılıyor. (Telefon hattı gibi düşün, bu numara üzerinden konuşulacak).
+
+AF_INET → IPv4 protokolü.
+
+SOCK_STREAM → TCP bağlantısı.
+
+0 → protokol otomatik seç.
+
+sockaddr_in serverAddr; → adres bilgilerini tutacak bir kutu.
+
+serverAddr.sin_family = AF_INET;
+
+Adres tipi IPv4.
+
+serverAddr.sin_addr.s_addr = INADDR_ANY;
+
+“Bana hangi IP’den bağlanırlarsa bağlansın, kabul et.”
+
+serverAddr.sin_port = htons(port);
+
+Portu küçük-büyük endian uyumu için çevirip yerleştiriyor.
+
+bind(serverSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr));
+
+Sunucunun “şu portu dinle” demesi.
+
+listen(serverSocket, 5);
+
+Dinleme moduna geçiyor.
+
+“5 kişi aynı anda bağlanmayı denerse sıraya al” demek.
+
+handleConnections();
+
+Artık bağlantıları yönetmeye başlıyor.
+
+2. void handleConnections()
+
+Burası sunucunun kalbi. Döngü içinde sürekli çalışıyor.
+Adımlar:
+
+while (true) { ... } → Sonsuz döngü (sunucu hep açık).
+
+accept(...) → Yeni biri bağlanırsa kabul ediyor.
+
+Yeni bağlanan için Client nesnesi oluşturup clients listesine ekliyor.
+
+Sonra mevcut tüm client’leri kontrol ediyor (for (auto& client : clients)).
+
+recv(client.socket, buffer, ...) → bu client’tan mesaj var mı diye okuyor.
+
+Eğer <= 0 → bağlantı kopmuş, client’i listeden çıkarıyor.
+
+Mesaj varsa:
+
+client.buffer += std::string(buffer, bytesReceived); → parçaları birleştiriyor.
+
+Eğer gelen yazıda "\n" varsa → bu, bir mesajın sonu.
+
+Mesajı satır satır işliyor (std::getline).
+
+Eğer satır /nick ile başlıyorsa:
+
+Kullanıcının nick’i değiştirilir (client.nickname = ...).
+
+Aksi halde:
+
+broadcast(message, client.socket) çağrılır → mesaj diğer tüm client’lere gider.
+
+3. void broadcast(const std::string& message, int senderSocket)
+
+Bu fonksiyon yayın yapıyor.
+Adımlar:
+
+for (auto& client : clients) → tüm kullanıcıları dolaş.
+
+Eğer bu kişi mesajı gönderen değilse (if (client.socket != senderSocket)).
+
+send(client.socket, message.c_str(), message.size(), 0); → mesajı gönder.
+
+Kısacası: “Ali mesaj yazarsa, Veli ve Ayşe’ye gider; Ali’ye tekrar gönderilmez.”
+
+4. int main()
+
+Adımlar:
+
+IRCServer server; → Sunucudan bir nesne yarat.
+
+server.start(6667); → Sunucuyu 6667 portunda başlat. (IRC’nin default portu).
+
+return 0; → program bittiğinde çık.
+
+📌 Genel mantık:
+
+start() → sunucuyu kurar.
+
+handleConnections() → sürekli yeni kullanıcıları ve mesajları kontrol eder.
+
+broadcast() → mesajı herkese gönderir.
+
+main() → başlat butonu gibi.
+Soket nedir?
+
+Soket, bilgisayar programının başka bir bilgisayar veya programla haberleşmesi için açtığı kapı gibidir.
+
+Yani “senin programın burada dinliyor, biri gelirse konuşacağız” diyor.
+
+IP + port ile tanımlanır. Örnek: 127.0.0.1:6667 (localhost üzerindeki 6667 portu).
+
+Kodda soket açma
+
+Senin kodda:
+
+_listenFd = socket(AF_INET6, SOCK_STREAM, 0);
+
+
+AF_INET6 → IPv6 kullanacağız (modern IP).
+
+SOCK_STREAM → TCP kullanıyoruz. Yani paketler sıralı ve kaybolmadan gelir (UDP değil).
+
+0 → protokolü otomatik seç.
+
+Bu fonksiyon yeni bir soket tanımlayıcı döndürür (_listenFd), bu da senin programın o “kapı”ya sahip olduğunu gösterir.
+
+Porta bağlamak
+bind(_listenFd, (struct sockaddr*)&addr6, sizeof(addr6))
+
+
+bind() → soketi IP ve porta bağlar, yani “bu kapıyı 6667 portuna koyuyorum” der.
+
+Eğer port doluysa veya izniniz yoksa hata verir.
+
+Dinlemeye başlamak
+listen(_listenFd, 128)
+
+
+listen() → “Artık bu kapıyı dinle, gelenleri sıraya koy, 128 kişiye kadar bekletebilirsin” der.
+
+Bu sıradaki kişiler henüz bağlanmadı, sadece bekliyorlar.
+
+Bağlantı kabul etmek (accept)
+int cfd = accept(_listenFd, (struct sockaddr*)&ss, &slen);
+
+
+accept() → sıradaki bir client geldiğinde onu alır ve yeni bir soket açar.
+
+_listenFd → hala dinlemeye devam eder, yeni soket cfd ile gelen client ile konuşur.
+
+Artık bu client ile okuyup yazabilirsiniz (recv/send).
+
+Neden ayrı soket?
+
+_listenFd → sadece “bağlanmak isteyenleri dinler”, mesaj almaz.
+
+cfd → gerçek konuşma soketi, sadece bu client ile ilgilenir.
+
+Non-blocking (engellemesin)
+fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+
+
+Normalde soket “bloklar”: recv() derse veri gelene kadar bekler.
+
+Non-blocking → veri yoksa hemen döner.
+
+Bu sayede binlerce client aynı anda dinlenebilir, program takılmaz.
+
+Özet
+
+socket() → kapıyı açar.
+
+bind() → kapıyı port + IP ile etiketler.
+
+listen() → gelenleri sıraya koyar.
+
+accept() → sıradaki bir client’i alır ve onunla konuşmaya başlar.
+
+fcntl(..., O_NONBLOCK) → bekletmeden çalışır.
